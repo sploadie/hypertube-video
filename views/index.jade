@@ -1,5 +1,11 @@
 extends layout
 
 block content
-  h1= title
-  p Welcome to #{title}
+	h1= title
+	p Welcome to #{title}
+
+	form(action='/add_torrent', method='post')
+		div(data-role='fieldcontain')
+			fieldset(data-role='controlgroup')
+				label(for='torrent') torrent
+					input(id='torrent',type='text',value='',placeholder='Magnet Link (ex: \'magnet:whatever\')',name='torrent')
