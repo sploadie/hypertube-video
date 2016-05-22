@@ -2,7 +2,7 @@ var express = require('express');
 var router = express.Router();
 var vidStreamer = require("vid-streamer");
 var torrentStream = require('torrent-stream');
-
+var ffmpeg = require('fluent-ffmpeg');
 // var newSettings = {
 // 		rootFolder: "~/hypertube/torrents/",
 //     rootPath: "torrents/",
@@ -25,6 +25,13 @@ router.post('/add_torrent', function(req, res, next) {
 	    engine.files.forEach(function(file) {
 	        console.log('filename:', file.name);
 	        var stream = file.createReadStream();
+	        var converted = ffmpeg(stream)
+				.videoCodec('mpeg4')
+				.audioCodec('aac')
+				.on('progress', function(info) { console.log('Progress: ' + info.keys + '%'); })
+				.on('end', function() { console.log('Done processing input stream'); })
+				.on('error', function(err) { console.log('Error: ' + err.message); })
+				.save('./videos/converted.mp4');
 	        // stream is readable stream to containing the file content
 	    });
 	});
