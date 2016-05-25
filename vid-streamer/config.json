@@ -1,0 +1,10 @@
+{
+	"mode": "development",
+	"forceDownload": false,
+	"random": false,
+	"rootFolder": "torrents/",
+	"rootPath": "videos/",
+	"server": "VidStreamer.js/0.1.4",
+	"maxAge": "3600",
+	"throttle": false
+}

@@ -1,0 +1,12 @@
+extends layout
+
+block content
+	script(type='text/javascript', src='//cdn.embed.ly/player-0.0.11.min.js')
+	script(id='player_script' type='text/javascript' video=video).
+		var iframe = document.createElement('iframe');
+		iframe.src = '/video/'+$('#player_script').attr('video');
+		document.body.appendChild(iframe);
+		var player = new playerjs.Player(iframe);
+		player.on('ready', function(){
+			player.play();
+		});

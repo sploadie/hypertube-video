@@ -1,0 +1,11 @@
+extends layout
+
+block content
+	video(id='video' preload='none')
+		source(src=video_path type=video_type)
+	script(type='text/javascript' src='//cdn.embed.ly/player-0.0.11.min.js')
+	script(type='text/javascript').
+		var video = document.getElementById('video');
+		video.load();
+		var adapter = playerjs.HTML5Adapter(video);
+		adapter.ready();
