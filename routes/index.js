@@ -45,6 +45,7 @@ router.post('/add_torrent', function(req, res, next) {
 			console.log('Filename:', file.name);
 			var extension = file.name.match(/.*(\..+?)$/);
 			if (extension !== null && extension.length === 2 && extension_list[extension[1].toLowerCase()] !== undefined) {
+				console.log('Downloading item');
 				file.select();
 			}
 			// var stream = file.createReadStream();
@@ -53,7 +54,7 @@ router.post('/add_torrent', function(req, res, next) {
 	});
 
 	engine.on('idle', function() {
-		console.log('Event: idle');
+		console.log('Engine idle; destroying');
 		// FIXME if fds are still open, maybe turn this back on
 		// engine.removeAllListeners();
 		engine.destroy();

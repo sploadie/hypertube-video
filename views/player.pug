@@ -5,6 +5,9 @@ block content
 	script(id='player_script' type='text/javascript' video=video).
 		var iframe = document.createElement('iframe');
 		iframe.src = '/video/'+$('#player_script').attr('video');
+		var multiplier = 50;
+		iframe.width = 16 * multiplier;
+		iframe.height = 9 * multiplier;
 		document.body.appendChild(iframe);
 		var player = new playerjs.Player(iframe);
 		player.on('ready', function(){

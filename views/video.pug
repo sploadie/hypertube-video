@@ -1,16 +1,20 @@
-extends layout
-
-block content
-	div(id='video')
-	script(type='text/javascript' src='http://content.jwplatform.com/libraries/F4Xxz6Ay.js')
-	script(type='text/javascript' src='//cdn.embed.ly/player-0.0.11.min.js')
-	script(id='video_script' type='text/javascript' video_path=video_path).
-		jwplayer("video").setup({
-			file: $('#player_script').attr('video_path'),
-			height: '100%',
-			width: '100%'
-		});
-		var adapter = playerjs.JWPlayerAdapter(jwplayer());
-		jwplayer().onReady(function(){
-			adapter.ready();
-		});
+doctype html
+html
+	head
+		title= title
+		script(type='text/javascript' src='/javascript/jquery.min.js')
+	body
+		div(id='video')
+		script(type='text/javascript' src='http://content.jwplatform.com/libraries/F4Xxz6Ay.js')
+		script(type='text/javascript' src='//cdn.embed.ly/player-0.0.11.min.js')
+		script(id='video_script' type='text/javascript' video_path=video_path).
+			var jw_instance = jwplayer("video");
+			jw_instance.setup({
+				file: $('#video_script').attr('video_path'),
+				height: '100%',
+				width: '100%'
+			});
+			var adapter = playerjs.JWPlayerAdapter(jw_instance);
+			jw_instance.onReady(function(){
+				adapter.ready();
+			});
