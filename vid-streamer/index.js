@@ -16,7 +16,9 @@ var Throttle = require('throttle');
 
 var handler = new events.EventEmitter();
 
-// Stuff to serve. Don't add null or "null" to the list (".null" should be fine) as the regex extension check will fail and you'll have a big security hole. And obviously don't add .js, .php or anything else you don't want to serve as source either.
+// Stuff to serve. Don't add null or "null" to the list (".null" should be fine)
+// as the regex extension check will fail and you'll have a big security hole.
+// And obviously don't add .js, .php or anything else you don't want to serve as source either.
 var mimeTypes = {
 	".swf": "application/x-shockwave-flash",
 	".flv": "video/x-flv",
@@ -75,7 +77,7 @@ var vidStreamer = function (req, res) {
 	var reqUrl = url.parse(req.url, true);
 
 	// DEBUG
-	console.log("VidStreamer: reqUrl:", reqUrl);
+	console.log("VidStreamer: reqUrl.pathname:", reqUrl.pathname);
 	// DEBUG
 
 	info.path = typeof reqUrl.pathname === "string" ? reqUrl.pathname.substring(1) : undefined;
@@ -321,8 +323,8 @@ handler.on("security", function (res, e) {
 	res.end("<!DOCTYPE html><html lang=\"en\">" +
 		"<head><title>403 Forbidden</title></head>" +
 		"<body>" +
-		"<h1>Hey!</h1>" +
-		"<p>Stop trying to hack my server!</p>" +
+		"<h1>Forbidden</h1>" +
+		"<p>Incorrect file path</p>" +
 		"</body></html>");
 	console.error("403 Security - " + (e ? e.message : ""));
 });
@@ -333,7 +335,7 @@ handler.on("badMime", function (res, e) {
 		"<head><title>403 Forbidden</title></head>" +
 		"<body>" +
 		"<h1>Sorry&hellip;</h1>" +
-		"<p>You're not allowed to download files of that type.</p>" +
+		"<p>You're not allowed to stream files of that type.</p>" +
 		"</body></html>");
 	console.error("403 Bad MIME - " + (e ? e.message : ""));
 });

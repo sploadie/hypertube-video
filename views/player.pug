@@ -2,12 +2,19 @@ extends layout
 
 block content
 	script(type='text/javascript', src='//cdn.embed.ly/player-0.0.11.min.js')
-	script(id='player_script' type='text/javascript' video=video).
+	script(id='player_script' type='text/javascript' video=video adapter=adapter ).
 		var iframe = document.createElement('iframe');
-		iframe.src = '/video/'+$('#player_script').attr('video');
+		iframe.src = '/adapter/'+$('#player_script').attr('adapter')+'/'+$('#player_script').attr('video');
+		/* Handle Size? */
 		var multiplier = 50;
 		iframe.width = 16 * multiplier;
 		iframe.height = 9 * multiplier;
+		/* Handle overflow */
+		iframe.style = 'overflow-y: hidden;';
+		iframe.frameBorder = '0';
+		iframe.scrolling = 'no';
+		iframe.seamless = 'seamless';
+		/* Add to body and attach PlayerJS */
 		document.body.appendChild(iframe);
 		var player = new playerjs.Player(iframe);
 		player.on('ready', function(){
