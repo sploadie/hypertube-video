@@ -128,9 +128,10 @@ var parse_torrents = function(torrent_source, first_page, last_page) {
 							// console.log(movie);
 							torrent.omdb = movie;
 							if (torrent.omdb) {
-								add_torrent_to_database(torrent);
+								console.log(torrent);
+								// add_torrent_to_database(torrent);
 							} else {
-								console.log('OMDB data not found:', torrent.name);
+								console.log('OMDB data not found:', torrent.title, torrent.year);
 							}
 						});
 					} else {
@@ -148,10 +149,10 @@ var parse_torrents = function(torrent_source, first_page, last_page) {
 };
 
 /* Prepare MongoDB & Mongoose */
-mongoose.connect('mongodb://localhost/test');
-var db = mongoose.connection;
-db.on('error', console.error.bind(console, 'Connection error:'));
-db.once('open', function() {
-	// parse_torrents(kickass, 1, 1);
-	parse_torrents(pirate_bay, 1, 1);
-});
+// mongoose.connect('mongodb://localhost/test');
+// var db = mongoose.connection;
+// db.on('error', console.error.bind(console, 'Connection error:'));
+// db.once('open', function() {
+	parse_torrents(kickass, 1, 1);
+	// parse_torrents(pirate_bay, 1, 1);
+// });
