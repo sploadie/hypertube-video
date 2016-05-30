@@ -1,0 +1,3 @@
+#!/bin/bash
+mkdir -p ~/goinfre/mongodb
+mongod --dbpath ~/goinfre/mongodb $@
