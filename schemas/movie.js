@@ -2,9 +2,13 @@ var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 
 var movieSchema = new Schema({
-  title: String,
-  year: Number,
-  resolutions: [{ resolution: String, seeds: Number, magnet: String }],
+  title: { type: String, unique: true, required: true, dropDups: true },
+  year:  { type: Number, required: true },
+  resolutions: [{
+  	resolution: { type: String, required: true },
+  	seeds:      { type: Number, required: true },
+  	magnet:     { type: String, required: true }
+  }],
   rated: String,
   released: Date,
   genres: { type: [String], index: true },
@@ -12,16 +16,16 @@ var movieSchema = new Schema({
   writers: [String],
   actors: [String],
   plot: String,
-  poster: String,
+  poster: { type: String, required: true },
   imdb: {
   	url: String,
-  	rating: Number,
+  	rating: { type: Number, required: true },
   	votes: Number
   }
 });
 
 movieSchema.statics.findByTitle = function (name, cb) {
-  return this.find({ title: new RegExp(name, 'i') }, cb);
+  return this.find({ title: new RegExp('^'+name+'$', 'i') }, cb);
 }
 
 var Movie = mongoose.model('Movie', movieSchema);
