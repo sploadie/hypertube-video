@@ -10,16 +10,18 @@ var Movie = require('../schemas/movie');
 var kickass = {
 	name: 'Kickass',
 	url: function(page) {
-		return 'https://kat.cr/usearch/category%3Amovies/' + page;
+		return 'https://kat.cr/movies/' + page;
 	},
 	parse: function($) {
 		return $(".odd").map(function(index, torrent) {
 			// $(torrent).attr('id');
 			var elem = $(torrent);
+			// console.log('Kickass Magnet:', elem.find('a[title="Torrent magnet link"]').attr('href'));
 			return {
 				name: elem.find('.filmType a.cellMainLink').text(),
-				magnet: elem.find('a.icon16').attr('href'),
-				seeds: 8
+				magnet: elem.find('a[title="Torrent magnet link"]').attr('href'),
+				seeds: parseInt(elem.find('td.green.center').first().text()),
+				source: 'Kickass'
 			};
 			// console.log($(torrent).attr('id'));
 		});
@@ -39,7 +41,8 @@ var pirate_bay = {
 			return {
 				name: elem.find('.detName .detLink').text(),
 				magnet: elem.find('a[title="Download this torrent using magnet"]').attr('href'),
-				seeds: 8
+				seeds: parseInt(elem.find('td[align="right"]').first().text()),
+				source: 'Pirate Bay'
 			};
 			// console.log($(torrent).attr('id'));
 		});
@@ -73,11 +76,12 @@ var add_torrent_to_database = function(torrent, verbose) {
 				/* Preparing Movie object for database */
 				movie = new Movie({
 					title: torrent.omdb.title,
-					year: torrent.omdb.year,
+					year: (torrent.omdb.year && torrent.omdb.year.from ? torrent.omdb.year.from: torrent.omdb.year),
 					resolutions: [{
 						resolution: torrent.resolution,
 						seeds: torrent.seeds,
-						magnet: torrent.magnet
+						magnet: torrent.magnet,
+						source: torrent.source
 					}],
 					rated: torrent.omdb.rated,
 					released: new Date(torrent.omdb.released),
@@ -103,6 +107,7 @@ var add_torrent_to_database = function(torrent, verbose) {
 					/* Promise reject callback */
 					function(err) {
 						console.error('Mongoose Error:'.red, movie.title+':', clean_mongoose_err(err));
+						if (clean_mongoose_err(err).includes('year')) console.log(torrent);
 						fulfill(false);
 					}
 				);
@@ -143,6 +148,7 @@ var add_torrent_to_database = function(torrent, verbose) {
 						save_movie = true;
 						elem.seeds = torrent.seeds;
 						elem.magnet = torrent.magnet;
+						elem.source = torrent.source;
 					}
 				}
 			});
@@ -153,7 +159,8 @@ var add_torrent_to_database = function(torrent, verbose) {
 				movie.resolutions.push({
 					resolution: torrent.resolution,
 					seeds: torrent.seeds,
-					magnet: torrent.magnet
+					magnet: torrent.magnet,
+					source: torrent.source
 				});
 			}
 			/* Update only if change was made */
@@ -270,9 +277,9 @@ var parse_torrents = function(torrent_source, page, verbose) {
 	});
 };
 
-var open_db = function(callback) {
+var open_db = function(mongo_db, callback) {
 	/* Prepare MongoDB & Mongoose */
-	mongoose.connect('mongodb://localhost/test');
+	mongoose.connect(mongo_db);
 	var db = mongoose.connection;
 	db.on('error', console.error.bind(console, 'Mongoose Error: Connection error:'.red));
 	db.once('open', function() {
@@ -283,11 +290,11 @@ var open_db = function(callback) {
 	});
 }
 
-var spin_movies = function(count, pages, original_sources, verbose) {
+var spin_movies = function(mongo_db, count, pages, original_sources, verbose) {
 	var sources = original_sources.filter(function(s) {
 		return s.name != undefined && s.url != undefined && s.parse != undefined;
 	});
-	open_db(function(close_db) {
+	open_db(mongo_db, function(close_db) {
 		new_magnets = 0;
 		var spin = function(page) {
 			Promise.all(sources.map(function(source) {
@@ -328,5 +335,6 @@ var spin_movies = function(count, pages, original_sources, verbose) {
 	});
 }
 
-spin_movies(1000, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
+spin_movies('mongodb://52.30.199.218:27017/hypertube', 150, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
+// spin_movies('mongodb://localhost/test', 15, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
 // spin_movies(1000, { first: 1, last: 50, iter: 1 }, [pirate_bay]);

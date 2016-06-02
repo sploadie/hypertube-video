@@ -7,7 +7,8 @@ var movieSchema = new Schema({
   resolutions: [{
   	resolution: { type: String, required: true },
   	seeds:      { type: Number, required: true },
-  	magnet:     { type: String, required: true }
+  	magnet:     { type: String, required: true },
+  	source:     { type: String, required: true }
   }],
   rated: String,
   released: Date,
