@@ -285,7 +285,7 @@ var open_db = function(mongo_db, callback) {
 	db.once('open', function() {
 		callback(function() {
 			console.log('Mongoose Notice: Killing database connection');
-			db.close();
+			mongoose.disconnect();
 		});
 	});
 }
@@ -335,6 +335,7 @@ var spin_movies = function(mongo_db, count, pages, original_sources, verbose) {
 	});
 }
 
-spin_movies('mongodb://52.30.199.218:27017/hypertube', 150, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
+// spin_movies('mongodb://52.30.199.218:27017/hypertube', 150, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
+spin_movies('mongodb://localhost/test', 150, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
 // spin_movies('mongodb://localhost/test', 15, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
 // spin_movies(1000, { first: 1, last: 50, iter: 1 }, [pirate_bay]);

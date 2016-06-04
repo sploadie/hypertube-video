@@ -8,6 +8,7 @@ var torrentStream = require('torrent-stream');
 var Movie = require('../schemas/movie');
 
 var mimeTypes = require('./mime_types');
+var settings = require('./config.json');
 
 var handler = new events.EventEmitter();
 var spiderStreamer = require('./streamer');
@@ -20,44 +21,86 @@ var hasValidExtension = function(filename) {
 	return false;
 }
 
-var getMovieStream = function(magnet, torrent_path) {
+var engineCount = 0;
+var engineHash = {};
+
+var getMovieStream = function(magnet, torrent_path, release_date) {
 	return new Promise(function(fulfill, reject) {
+		/* FIXME: Only do this engine bullshit if it hasn't been done already; add 'data' field in database to make this work. */
+		var original = true;
 		var engine = torrentStream(magnet, {
 			path: torrent_path
 		});
-
+		engineHash[(engine.hashIndex = engineCount++)] = engine;
+		console.log('spiderTorrent Notice: Waiting for torrentStream engine')
 		engine.on('ready', function() {
+			/* Check if original engine */
+			for (var i = 0; i < engine.hashIndex; i++) {
+				if (engineHash[i] && engineHash[i].path === engine.path) {
+					console.log('spiderTorrent Notice: Engine', engine.hashIndex, 'not original: copying engine', i);
+					engineHash[engine.hashIndex] = undefined;
+					engine.destroy();
+					engine = engineHash[i];
+					original = false;
+					break;
+				}
+			}
+			/* Actual Engine Manipulation */
 			var movie_file;
 			engine.files.forEach(function(file) {
-				/* Look for valid movie file extension */
-				if (!movie_file && hasValidExtension(file.name)) {
-					console.log('Movie file found:', file.name);
+				/* Look for valid movie file extension and biggest file */
+				if (hasValidExtension(file.name) && (!movie_file || file.length > movie_file.length)) {
+					console.log('Movie file found:', file.name, '| size:', file.length);
+					if (movie_file) {
+						console.log('Skipping item:', movie_file.name, '| size:', movie_file.length);
+						// movie_file.deselect();
+					}
 					movie_file = file;
 				} else {
 					/* Ignore non-movie files */
-					console.log('Skipping item:', file.name);
-					file.deselect();
+					console.log('Skipping item:', file.name, '| size:', file.length);
+					// file.deselect();
 				}
 			});
 			/* If movie found, hand it back */
 			if (movie_file) {
-				return fulfill({
-					name: file.name,
-					size: file.length,
-					stream: file.createReadStream()
+				movie_file.select();
+				var movie_data = {
+					name: movie_file.name,
+					length: movie_file.length,
+					date: release_date,
+					// stream: movie_file.createReadStream({ flags: "r", start: 0, end: movie_file.length - 1 })
+					path: engine.path + '/' + movie_file.path
+				};
+				console.log('spiderTorrent Notice: Movie data obtained:', movie_data);
+				fulfill(movie_data);
+				if (original) {
+					engine.on('download', function(piece_index) {
+						if (piece_index % 10 == 0) {
+							console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded piece: Index:', piece_index, '(', engine.swarm.downloaded, '/', movie_file.length, ')');
+						}
+					});
+					engine.on('idle', function() {
+						console.log('torrentStream Notice: Engine', engine.hashIndex, 'idle');
+						if (engine.swarm.downloaded < movie_data.length) {
+							console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded (', engine.swarm.downloaded, '/', movie_data.length, ')');
+						} else {
+							console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded (', engine.swarm.downloaded, '/', movie_data.length, '); destroying');
+							/* FIXME: If fds are still open, maybe turn this back on */
+							engine.removeAllListeners();
+							engine.destroy();
+						}
+					});
+				}
+			} else {
+				engine.removeAllListeners();
+				engine.destroy();
+				return reject({
+					message: 'No valid movie file was found'
 				});
 			}
-			return reject({
-				message: 'No valid movie file was found'
-			});
 		});
 
-		engine.on('idle', function() {
-			console.log('Engine idle; destroying');
-			/* FIXME: If fds are still open, maybe turn this back on */
-			engine.removeAllListeners();
-			engine.destroy();
-		});
 	});
 }
 // console.log('Torrent Stream Error:'.red, err.message);
@@ -77,12 +120,13 @@ var clean_mongoose_err = function(err) {
 
 /* Called by video player */
 var spiderTorrent = function(req, res) {
+	console.log('spiderTorrent Notice: Query:', req.query);
 	var movie_id;
 	var resolution;
 	try {
 		/* Get movie._id and resolution in req.params */
-		if (req.params.id)         movie_id   = decodeURIComponent(req.params.id);
-		if (req.params.resolution) resolution = decodeURIComponent(req.params.resolution);
+		if (req.query.id)         movie_id   = decodeURIComponent(req.query.id);
+		if (req.query.resolution) resolution = decodeURIComponent(req.query.resolution);
 	} catch (exception) {
 		/* On exception, redirect */
 		console.log('spiderTorrent Error:'.red, 'Could not decode params:', req.params);
@@ -91,20 +135,21 @@ var spiderTorrent = function(req, res) {
 	}
 	if (movie_id && resolution && resolution.resolution == undefined) {
 		/* Query for movie */
-		this.findById(movie_id, function(err, movie) {
+		Movie.findById(movie_id, function(err, movie) {
 			if (err) {
 				/* If none match, redirect */
 				console.log('Mongoose Error:'.red, err);
 				handler.emit("noMovie", res, err);
 				return false;
 			}
+			console.log('spiderTorrent Notice: Found title:', movie.title);
 			/* Get resolution info from movie */
 			movie.resolutions.forEach(function(m_res) {
 				if (m_res.resolution == resolution) {
-					resolution = m_res.resolution;
+					resolution = m_res;
 				}
 			});
-			if (!resolution.resolution) {
+			if (resolution.resolution === undefined) {
 				/* If missing, log error and pick whatever is first resolution */
 				console.log('spiderTorrent Error:'.red, 'Resolution not found:', resolution);
 				if (movie.resolutions[0]) {
@@ -129,10 +174,12 @@ var spiderTorrent = function(req, res) {
 			}
 			/* DONE BY TORRET-STREAM: Create folder './torrents/'+movie._id+'/'+resolution.resolution in a way that does not destroy it if it exists */
 			/* Get filestream, filename and file size from torrent-stream, with the file created in folder above */
-			getMovieStream(resolution.magnet, '../torrents/'+movie._id+'/'+resolution.resolution).then(
+			console.log('spiderTorrent Notice: Retrieving torrent with magnet');
+			getMovieStream(resolution.magnet, './torrents/'+movie._id+'/'+resolution.resolution, movie.released).then(
 				/* Promise fulfill callback */
 				function(data) {
 					/* Hand filestream, filename and file size to vid-streamer hack */
+					console.log('spiderTorrent Notice: Sending data spiderStreamer: { name: "'+data.name+'", size: '+data.length+', date: [Date], stream: [Stream] }');
 					spiderStreamer(data, res);
 				},
 				/* Promise reject callback */
@@ -149,7 +196,17 @@ var spiderTorrent = function(req, res) {
 		handler.emit("badRequest", res);
 		return false;
 	}
+	return true;
 }
+
+var errorHeader = function(res, code) {
+	var header = {
+		"Content-Type": "text/html",
+		Server: settings.server
+	};
+
+	res.writeHead(code, header);
+};
 
 handler.on("noMovie", function(res) {
 	errorHeader(res, 404);

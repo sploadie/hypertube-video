@@ -7,11 +7,12 @@ html
     div(id='video')
     script(type='text/javascript' src='http://content.jwplatform.com/libraries/F4Xxz6Ay.js')
     script(type='text/javascript' src='//cdn.embed.ly/player-0.0.11.min.js')
-    script(id='video_script' type='text/javascript' video_path=video_path video_type=video_type).
+    script(id='video_script' type='text/javascript' video_path=video_path).
       var jw_instance = jwplayer("video");
       jw_instance.setup({
         file: $('#video_script').attr('video_path'),
-        type: $('#video_script').attr('video_type'),
+        type: 'video/mp4',
+        //- type: $('#video_script').attr('video_type'),
         width: '100%',
         height: '100%',
         skin: { name: 'stormtrooper' } // beelden bekle five glow roundster seven six stormtrooper vapor

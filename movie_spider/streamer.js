@@ -24,14 +24,17 @@ var spiderStreamer = function(data, res) {
 		return false;
 	}
 
+	info.file = data.name;
+	info.path = data.path;
 	info.start = 0;
 	info.end = data.length - 1;
 	info.size = data.length;
-	info.modified = new Date;
+	info.modified = data.date;
 	info.rangeRequest = false; /* Tinker with this is something breaks */
 
 	info.length = info.end - info.start + 1;
 
+	console.log('spiderStreamer Notice: Sending header');
 	downloadHeader(res, info);
 
 	// Flash vids seem to need this on the front, even if they start part way through. (JW Player does anyway.)
@@ -39,13 +42,16 @@ var spiderStreamer = function(data, res) {
 		res.write("FLV" + pack("CCNN", 1, 5, 9, 9));
 	}
 	// stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
-	stream = data.stream; /* Use torrent-stream rather than file */
+	// stream = data.stream; /* Use torrent-stream rather than file */
+	stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
 
 	if (settings.throttle) {
 		stream = stream.pipe(new Throttle(settings.throttle));
 	}
 
+	console.log('spiderStreamer Notice: Piping stream');
 	stream.pipe(res);
+	console.log('spiderStreamer Notice: Pipe set');
 	return true;
 };
 
@@ -96,7 +102,6 @@ var downloadHeader = function(res, info) {
         header["Access-Control-Allow-Headers"] = "Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept";
     }
     header.Server = settings.server;
-	header.Server = settings.server;
 	
 	res.writeHead(code, header);
 };
