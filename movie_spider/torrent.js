@@ -1,3 +1,4 @@
+var events = require('events');
 var colors  = require('colors');
 var promise = require('promise');
 var mongoose = require('mongoose');
@@ -6,33 +7,14 @@ var torrentStream = require('torrent-stream');
 
 var Movie = require('../schemas/movie');
 
-var extension_list = {
-	".flv":		"video/x-flv",
-	".f4v":		"video/mp4",
-	".f4p":		"video/mp4",
-	".mp4":		"video/mp4",
-	".mkv":		"video/mp4", /* FAST PATCH (POSSIBLY MUST FIX LATER) (SHOULD ACTUALLY BE CONVERTED FROM video/mkv TO WHATEVER) */
-	".asf":		"video/x-ms-asf",
-	".asr":		"video/x-ms-asf",
-	".asx":		"video/x-ms-asf",
-	".avi":		"video/x-msvideo",
-	".mpa":		"video/mpeg",
-	".mpe":		"video/mpeg",
-	".mpeg":	"video/mpeg",
-	".mpg":		"video/mpeg",
-	".mpv2":	"video/mpeg",
-	".mov":		"video/quicktime",
-	".movie":	"video/x-sgi-movie",
-	".mp2":		"video/mpeg",
-	".qt":		"video/quicktime",
-	".webm":	"video/webm",
-	".ts":		"video/mp2t",
-	".ogg":		"video/ogg"
-};
+var mimeTypes = require('./mime_types');
+
+var handler = new events.EventEmitter();
+var spiderStreamer = require('./streamer');
 
 var hasValidExtension = function(filename) {
 	var extension = filename.match(/.*(\..+?)$/);
-	if (extension !== null && extension.length === 2 && extension_list[extension[1].toLowerCase()] !== undefined) {
+	if (extension !== null && extension.length === 2 && mimeTypes[extension[1].toLowerCase()] !== undefined) {
 		return true;
 	}
 	return false;
@@ -94,17 +76,27 @@ var clean_mongoose_err = function(err) {
 }
 
 /* Called by video player */
-var torrentMovie = function(req, res) {
-	/* Get movie._id and resolution in req.params */
-	var movie_id = req.params.id
-	var resolution = req.params.resolution;
+var spiderTorrent = function(req, res) {
+	var movie_id;
+	var resolution;
+	try {
+		/* Get movie._id and resolution in req.params */
+		if (req.params.id)         movie_id   = decodeURIComponent(req.params.id);
+		if (req.params.resolution) resolution = decodeURIComponent(req.params.resolution);
+	} catch (exception) {
+		/* On exception, redirect */
+		console.log('spiderTorrent Error:'.red, 'Could not decode params:', req.params);
+		handler.emit("badRequest", res);
+		return false;
+	}
 	if (movie_id && resolution && resolution.resolution == undefined) {
 		/* Query for movie */
 		this.findById(movie_id, function(err, movie) {
 			if (err) {
-				console.log('Mongoose Error:'.red, err);
 				/* If none match, redirect */
-				// REDIRECT
+				console.log('Mongoose Error:'.red, err);
+				handler.emit("noMovie", res, err);
+				return false;
 			}
 			/* Get resolution info from movie */
 			movie.resolutions.forEach(function(m_res) {
@@ -114,8 +106,9 @@ var torrentMovie = function(req, res) {
 			});
 			if (!resolution.resolution) {
 				/* If missing, log error and pick whatever is first resolution */
-				console.log('torrentMovie Error:'.red, 'Resolution not found:', resolution);
+				console.log('spiderTorrent Error:'.red, 'Resolution not found:', resolution);
 				if (movie.resolutions[0]) {
+					console.log('spiderTorrent Notice:', 'Defaulting to resolution:', movie.resolutions[0].resolution);
 					resolution = movie.resolutions[0];
 				} else {
 					/* If there are no resolutions, delete movie and redirect */
@@ -129,29 +122,56 @@ var torrentMovie = function(req, res) {
 							console.error('Mongoose Error:'.red, 'Movie '+movie.title+' NOT deleted, despite no magnet links:', clean_mongoose_err(err));
 						}
 					);
-					// REDIRECT
+					console.log('spiderTorrent Error:'.red, 'Movie has no resolutions');
+					handler.emit("noMovie", res);
+					return false;
 				}
 			}
 			/* DONE BY TORRET-STREAM: Create folder './torrents/'+movie._id+'/'+resolution.resolution in a way that does not destroy it if it exists */
 			/* Get filestream, filename and file size from torrent-stream, with the file created in folder above */
 			getMovieStream(resolution.magnet, '../torrents/'+movie._id+'/'+resolution.resolution).then(
+				/* Promise fulfill callback */
 				function(data) {
 					/* Hand filestream, filename and file size to vid-streamer hack */
-					// VID STREAMER HACK
+					spiderStreamer(data, res);
 				},
+				/* Promise reject callback */
 				function(err) {
-					console.log('torrentMovie Error:'.red, err.message);
-					// REDIRECT
+					console.log('spiderTorrent Error:'.red, err.message);
+					handler.emit("noMovie", res);
+					return false;
 				}
 			);
 		});
 	} else {
 		/* If missing (or someone tried to hack resolution) redirect */
-		// REDIRECT
+		console.log('spiderTorrent Error:'.red, 'Invalid request:', req.params);
+		handler.emit("badRequest", res);
+		return false;
 	}
 }
 
+handler.on("noMovie", function(res) {
+	errorHeader(res, 404);
+	res.end("<!DOCTYPE html><html lang=\"en\">" +
+		"<head><title>404 Not found</title></head>" +
+		"<body>" +
+		"<h1>Sorry...</h1>" +
+		"<p>I can't play that movie.</p>" +
+		"</body></html>");
+});
 
+handler.on("badRequest", function(res) {
+	errorHeader(res, 400);
+	res.end("<!DOCTYPE html><html lang=\"en\">" +
+		"<head><title>400 Bad request</title></head>" +
+		"<body>" +
+		"<h1>Sorry...</h1>" +
+		"<p>Request is missing parameters, can't find movie.</p>" +
+		"</body></html>");
+});
+
+module.exports = spiderTorrent;
 
 
 
