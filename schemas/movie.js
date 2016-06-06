@@ -8,7 +8,13 @@ var movieSchema = new Schema({
   	resolution: { type: String, required: true },
   	seeds:      { type: Number, required: true },
   	magnet:     { type: String, required: true },
-  	source:     { type: String, required: true }
+  	source:     { type: String, required: true },
+    data:       {
+                  name: String,
+                  length: Number,
+                  path: String,
+                  torrent_date: Date
+    }
   }],
   rated: String,
   released: Date,

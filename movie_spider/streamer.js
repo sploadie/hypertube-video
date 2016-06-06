@@ -11,10 +11,11 @@ var handler = new events.EventEmitter();
 
 var mimeTypes = require('./mime_types');
 
-var spiderStreamer = function(data, res) {
+var spiderStreamer = function(data, query, range_string, res) {
 	var stream;
 	var info = {};
 	var ext;
+	var range;
 
 	ext = data.name.match(/.*(\..+?)$/);
 
@@ -24,13 +25,31 @@ var spiderStreamer = function(data, res) {
 		return false;
 	}
 
+	if (range_string && (range = range_string.match(/bytes=(.+)-(.+)?/)) !== null) {
+		info.start = isNumber(range[1]) && range[1] >= 0 && range[1] < info.end ? range[1] - 0 : info.start;
+		info.end = isNumber(range[2]) && range[2] > info.start && range[2] <= info.end ? range[2] - 0 : info.end;
+		info.rangeRequest = true;
+	} else {
+		
+	}
+
 	info.file = data.name;
 	info.path = data.path;
-	info.start = 0;
-	info.end = data.length - 1;
 	info.size = data.length;
 	info.modified = data.date;
-	info.rangeRequest = false; /* Tinker with this is something breaks */
+	info.rangeRequest = false;
+	info.start = 0;
+	info.end = data.length - 1;
+
+	if (range_string && (range = range_string.match(/bytes=(.+)-(.+)?/)) !== null) {
+		info.start = isNumber(range[1]) && range[1] >= 0 && range[1] < info.end ? range[1] - 0 : info.start;
+		info.end = isNumber(range[2]) && range[2] > info.start && range[2] <= info.end ? range[2] - 0 : info.end;
+		info.rangeRequest = true;
+	} else if (query.start || query.end) {
+		// This is a range request, but doesn't get range headers. So there.
+		info.start = isNumber(query.start) && query.start >= 0 && query.start < info.end ? query.start - 0 : info.start;
+		info.end = isNumber(query.end) && query.end > info.start && query.end <= info.end ? query.end - 0 : info.end;
+	}
 
 	info.length = info.end - info.start + 1;
 
@@ -133,6 +152,10 @@ var pack = function(format) {
 	return result;
 };
 
+var isNumber = function (n) {
+	return !isNaN(parseFloat(n)) && isFinite(n);
+};
+
 handler.on("badMime", function(res) {
 	errorHeader(res, 403);
 	res.end("<!DOCTYPE html><html lang=\"en\">" +
@@ -140,6 +163,15 @@ handler.on("badMime", function(res) {
 		"<body>" +
 		"<h1>Sorry...</h1>" +
 		"<p>Cannot stream that movie format.</p>" +
+		"</body></html>");
+});
+handler.on("badRange", function(res) {
+	errorHeader(res, 403);
+	res.end("<!DOCTYPE html><html lang=\"en\">" +
+		"<head><title>403 Forbidden</title></head>" +
+		"<body>" +
+		"<h1>Sorry...</h1>" +
+		"<p>Cannot stream that byte range.</p>" +
 		"</body></html>");
 });
 

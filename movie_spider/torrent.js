@@ -24,7 +24,7 @@ var hasValidExtension = function(filename) {
 var engineCount = 0;
 var engineHash = {};
 
-var getMovieStream = function(magnet, torrent_path, release_date) {
+var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 	return new Promise(function(fulfill, reject) {
 		/* FIXME: Only do this engine bullshit if it hasn't been done already; add 'data' field in database to make this work. */
 		var original = true;
@@ -62,23 +62,45 @@ var getMovieStream = function(magnet, torrent_path, release_date) {
 					// file.deselect();
 				}
 			});
-			/* If movie found, hand it back */
+			/* If movie found */
 			if (movie_file) {
+				/* Torrent movie */
 				movie_file.select();
+				/* Create movie file data hash and send it back */
 				var movie_data = {
 					name: movie_file.name,
 					length: movie_file.length,
-					date: release_date,
+					date: movie.released,
 					// stream: movie_file.createReadStream({ flags: "r", start: 0, end: movie_file.length - 1 })
 					path: engine.path + '/' + movie_file.path
 				};
 				console.log('spiderTorrent Notice: Movie data obtained:', movie_data);
 				fulfill(movie_data);
+				/* Save hash to database */
+				resolution.data = {
+					name: movie_file.name,
+					length: movie_file.length,
+					path: engine.path + '/' + movie_file.path,
+					torrent_date: new Date
+				}
+				movie.save().then(
+					/* Promise fulfill callback */
+					function(ret_movie) {
+						console.log('Mongoose Notice:', 'Title updated:'.cyan, ret_movie.title);
+						return fulfill(true);
+					},
+					/* Promise reject callback */
+					function(err) {
+						console.error('Mongoose Error:'.red, movie.title+':', clean_mongoose_err(err));
+						return fulfill(false);
+					}
+				);
+				/* Set up engine logger */
 				if (original) {
 					engine.on('download', function(piece_index) {
-						if (piece_index % 10 == 0) {
-							console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded piece: Index:', piece_index, '(', engine.swarm.downloaded, '/', movie_file.length, ')');
-						}
+						// if (piece_index % 10 == 0) {
+						console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded piece: Index:', piece_index, '(', engine.swarm.downloaded, '/', movie_file.length, ')');
+						// }
 					});
 					engine.on('idle', function() {
 						console.log('torrentStream Notice: Engine', engine.hashIndex, 'idle');
@@ -120,9 +142,12 @@ var clean_mongoose_err = function(err) {
 
 /* Called by video player */
 var spiderTorrent = function(req, res) {
+	// console.log('spiderTorrent Notice: Request:', req);
 	console.log('spiderTorrent Notice: Query:', req.query);
+	console.log('spiderTorrent Notice: Headers:', req.headers);
 	var movie_id;
 	var resolution;
+	var range = req.headers.range;
 	try {
 		/* Get movie._id and resolution in req.params */
 		if (req.query.id)         movie_id   = decodeURIComponent(req.query.id);
@@ -136,7 +161,7 @@ var spiderTorrent = function(req, res) {
 	if (movie_id && resolution && resolution.resolution == undefined) {
 		/* Query for movie */
 		Movie.findById(movie_id, function(err, movie) {
-			if (err) {
+			if (err || movie == null) {
 				/* If none match, redirect */
 				console.log('Mongoose Error:'.red, err);
 				handler.emit("noMovie", res, err);
@@ -172,27 +197,38 @@ var spiderTorrent = function(req, res) {
 					return false;
 				}
 			}
-			/* DONE BY TORRET-STREAM: Create folder './torrents/'+movie._id+'/'+resolution.resolution in a way that does not destroy it if it exists */
-			/* Get filestream, filename and file size from torrent-stream, with the file created in folder above */
-			console.log('spiderTorrent Notice: Retrieving torrent with magnet');
-			getMovieStream(resolution.magnet, './torrents/'+movie._id+'/'+resolution.resolution, movie.released).then(
-				/* Promise fulfill callback */
-				function(data) {
-					/* Hand filestream, filename and file size to vid-streamer hack */
-					console.log('spiderTorrent Notice: Sending data spiderStreamer: { name: "'+data.name+'", size: '+data.length+', date: [Date], stream: [Stream] }');
-					spiderStreamer(data, res);
-				},
-				/* Promise reject callback */
-				function(err) {
-					console.log('spiderTorrent Error:'.red, err.message);
-					handler.emit("noMovie", res);
-					return false;
-				}
-			);
+			// console.log('spiderTorrent Notice: Resolution info:', resolution.data.name);
+			if (resolution.data.name == undefined) {
+				/* DONE BY TORRET-STREAM: Create folder './torrents/'+movie._id+'/'+resolution.resolution in a way that does not destroy it if it exists */
+				/* Get filestream, filename and file size from torrent-stream, with the file created in folder above */
+				console.log('spiderTorrent Notice: Retrieving torrent with magnet');
+				getMovieStream(resolution.magnet, './torrents/'+movie._id+'/'+resolution.resolution, movie, resolution).then(
+					/* Promise fulfill callback */
+					function(data) {
+						/* Hand filestream, filename and file size to vid-streamer hack */
+						// console.log('spiderTorrent Notice: Sending data spiderStreamer: { name: "'+data.name+'", size: '+data.length+', date: [Date], stream: [Stream] }');
+						spiderStreamer(data, req.query, range, res);
+					},
+					/* Promise reject callback */
+					function(err) {
+						console.log('spiderTorrent Error:'.red, err.message);
+						handler.emit("noMovie", res);
+						return false;
+					}
+				);
+			} else {
+				/* Data has already been torrented; stream now */
+				spiderStreamer({
+					name: resolution.data.name,
+					length: resolution.data.length,
+					date: movie.released,
+					path: resolution.data.path
+				}, req.query, range, res);
+			}
 		});
 	} else {
 		/* If missing (or someone tried to hack resolution) redirect */
-		console.log('spiderTorrent Error:'.red, 'Invalid request:', req.params);
+		console.log('spiderTorrent Error:'.red, 'Invalid request:', req.query);
 		handler.emit("badRequest", res);
 		return false;
 	}
