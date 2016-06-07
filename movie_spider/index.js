@@ -97,6 +97,10 @@ var add_torrent_to_database = function(torrent, verbose) {
 						votes: torrent.omdb.imdb.votes
 					}
 				});
+				if (torrent.omdb.runtime) {
+					var minutes = parseInt(torrent.omdb.runtime);
+					movie.runtime = Math.floor(minutes/60) + 'h' + (minutes % 60)
+				}
 				/* Mongoose call and promises */
 				movie.save().then(
 					/* Promise fulfill callback */
@@ -335,7 +339,7 @@ var spin_movies = function(mongo_db, count, pages, original_sources, verbose) {
 	});
 }
 
-// spin_movies('mongodb://52.30.199.218:27017/hypertube', 150, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
-spin_movies('mongodb://localhost/test', 150, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
+spin_movies('mongodb://52.30.199.218:27017/hypertube', 1000, { first: 1, last: 80, iter: 1 }, [kickass, pirate_bay]);
+// spin_movies('mongodb://localhost/test', 150, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
 // spin_movies('mongodb://localhost/test', 15, { first: 1, last: 50, iter: 1 }, [kickass, pirate_bay]);
 // spin_movies(1000, { first: 1, last: 50, iter: 1 }, [pirate_bay]);

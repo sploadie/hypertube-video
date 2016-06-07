@@ -17,6 +17,7 @@ var movieSchema = new Schema({
     }
   }],
   rated: String,
+  runtime: String,
   released: Date,
   genres: { type: [String], index: true },
   director: String,
