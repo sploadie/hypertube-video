@@ -12,7 +12,7 @@ var http = require('http');
  * Get port from environment and store in Express.
  */
 
-var port = normalizePort(process.env.PORT || '3000');
+var port = normalizePort(process.env.PORT || '8000');
 app.set('port', port);
 
 /**
@@ -29,11 +29,11 @@ var server = http.createServer(app);
  * Mongoose patch setup XD
  */
 const mongoose = require('mongoose');
-mongoose.connect('mongodb://localhost/test');
+mongoose.connect('mongodb://52.30.199.218:27017/hypertube');
 mongoose.connection
   .on('error', console.log)
   .on('disconnected', function() {
-    return mongoose.connect('mongodb://localhost/test');
+    return mongoose.connect('mongodb://52.30.199.218:27017/hypertube');
   })
   .once('open', function() {
     server.listen(port);
