@@ -265,8 +265,3 @@ handler.on("badRequest", function(res) {
 });
 
 module.exports = spiderTorrent;
-
-
-
-
-

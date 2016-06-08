@@ -7,6 +7,7 @@ var Movie = require('../schemas/movie');
 
 const search_fields = {
 	title: 10,
+	genres: 4,
 	director: 3,
 	writers: 2,
 	actors: 3,
@@ -95,7 +96,7 @@ var search_movies = function(mongo_db, req) {
 	});
 }
 
-search_movies('mongodb://52.30.199.218:27017/hypertube', {body: {text: 'dead'}});
+search_movies('mongodb://52.30.199.218:27017/hypertube', {body: {text: 'action'}});
 /* TESTING END */
 
 module.exports = search;
