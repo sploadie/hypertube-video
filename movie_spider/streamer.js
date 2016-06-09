@@ -16,6 +16,8 @@ var spiderStreamer = function(data, query, range_string, res) {
 	var info = {};
 	var ext;
 	var range;
+	var i;
+	var timer_id;
 
 	ext = data.name.match(/.*(\..+?)$/);
 
@@ -62,16 +64,37 @@ var spiderStreamer = function(data, query, range_string, res) {
 	}
 	// stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
 	// stream = data.stream; /* Use torrent-stream rather than file */
-	stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
-
-	if (settings.throttle) {
-		stream = stream.pipe(new Throttle(settings.throttle));
-	}
-
-	console.log('spiderStreamer Notice: Piping stream');
-	stream.pipe(res);
-	console.log('spiderStreamer Notice: Pipe set');
-	return true;
+	stream = null;
+	i = 0;
+	timer_id = setInterval(function() {
+		++i;
+		if (stream == null) {
+			if (i === 5) {
+				clearInterval(timer_id);
+				console.error('spiderStreamer Error:'.red, 'Could not stream file:', info.path);
+				handler.emit("badFile", res);
+				return;
+			}
+			try {
+				stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
+			} catch(exception) {
+				console.log('spiderStreamer Error:'.red, exception);
+				console.log('spiderStreamer Notice: Retrying in 1 second...');
+				stream = null
+			}
+			if (stream !== null) {
+				if (settings.throttle) {
+					stream = stream.pipe(new Throttle(settings.throttle));
+				}
+				console.log('spiderStreamer Notice: Piping stream');
+				stream.pipe(res);
+				console.log('spiderStreamer Notice: Pipe set');
+			}
+		}
+		if (stream !== null) {
+			clearInterval(timer_id);
+		}
+	}, 1000);
 };
 
 spiderStreamer.settings = function(s) {
@@ -172,6 +195,15 @@ handler.on("badRange", function(res) {
 		"<body>" +
 		"<h1>Sorry...</h1>" +
 		"<p>Cannot stream that byte range.</p>" +
+		"</body></html>");
+});
+handler.on("badFile", function(res) {
+	errorHeader(res, 404);
+	res.end("<!DOCTYPE html><html lang=\"en\">" +
+		"<head><title>404 Not Found</title></head>" +
+		"<body>" +
+		"<h1>Sorry...</h1>" +
+		"<p>Cannot stream that file.</p>" +
 		"</body></html>");
 });
 

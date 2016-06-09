@@ -13,7 +13,8 @@ var movieSchema = new Schema({
                   name: String,
                   length: Number,
                   path: String,
-                  torrent_date: Date
+                  torrent_date: Date,
+                  downloaded: { type: Boolean, default: false }
     }
   }],
   rated: String,

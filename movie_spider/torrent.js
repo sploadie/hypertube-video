@@ -1,3 +1,4 @@
+var fs = require('fs');
 var events = require('events');
 var colors  = require('colors');
 var promise = require('promise');
@@ -23,6 +24,7 @@ var hasValidExtension = function(filename) {
 
 var engineCount = 0;
 var engineHash = {};
+var enginePaths = {};
 
 var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 	return new Promise(function(fulfill, reject) {
@@ -31,6 +33,7 @@ var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 		var engine = torrentStream(magnet, {
 			path: torrent_path
 		});
+		enginePaths[torrent_path] = enginePaths[torrent_path] ? enginePaths[torrent_path] : 1;
 		engineHash[(engine.hashIndex = engineCount++)] = engine;
 		console.log('spiderTorrent Notice: Waiting for torrentStream engine')
 		engine.on('ready', function() {
@@ -97,6 +100,7 @@ var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 				);
 				/* Set up engine logger */
 				if (original) {
+					movie_file.createReadStream({ start: movie_file.length - 1025, end: movie_file.length - 1 });
 					engine.on('download', function(piece_index) {
 						// if (piece_index % 10 == 0) {
 						console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded piece: Index:', piece_index, '(', engine.swarm.downloaded, '/', movie_file.length, ')');
@@ -104,13 +108,28 @@ var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 					});
 					engine.on('idle', function() {
 						console.log('torrentStream Notice: Engine', engine.hashIndex, 'idle');
-						if (engine.swarm.downloaded < movie_data.length) {
-							console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded (', engine.swarm.downloaded, '/', movie_data.length, ')');
+						if (engine.selected.length === 0) {//(engine.swarm.downloaded < movie_data.length) {
+							// console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded (', engine.swarm.downloaded, '/', movie_data.length, ')');
+							console.log('torrentStream Notice: Engine', engine.hashIndex, 'no files selected');
 						} else {
 							console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded (', engine.swarm.downloaded, '/', movie_data.length, '); destroying');
 							/* FIXME: If fds are still open, maybe turn this back on */
 							engine.removeAllListeners();
 							engine.destroy();
+							console.log('torrentStream Notice: Movie set as downloaded:', movie_data.title, resolution.resolution);
+							resolution.data.downloaded = true;
+							movie.save().then(
+								/* Promise fulfill callback */
+								function(ret_movie) {
+									console.log('Mongoose Notice:', 'Title updated:'.cyan, ret_movie.title);
+									return fulfill(true);
+								},
+								/* Promise reject callback */
+								function(err) {
+									console.error('Mongoose Error:'.red, movie.title+':', clean_mongoose_err(err));
+									return fulfill(false);
+								}
+							);
 						}
 					});
 				}
@@ -198,33 +217,44 @@ var spiderTorrent = function(req, res) {
 				}
 			}
 			// console.log('spiderTorrent Notice: Resolution info:', resolution.data.name);
-			if (resolution.data.name == undefined) {
-				/* DONE BY TORRET-STREAM: Create folder './torrents/'+movie._id+'/'+resolution.resolution in a way that does not destroy it if it exists */
-				/* Get filestream, filename and file size from torrent-stream, with the file created in folder above */
-				console.log('spiderTorrent Notice: Retrieving torrent with magnet');
-				getMovieStream(resolution.magnet, './torrents/'+movie._id+'/'+resolution.resolution, movie, resolution).then(
-					/* Promise fulfill callback */
-					function(data) {
-						/* Hand filestream, filename and file size to vid-streamer hack */
-						// console.log('spiderTorrent Notice: Sending data spiderStreamer: { name: "'+data.name+'", size: '+data.length+', date: [Date], stream: [Stream] }');
-						spiderStreamer(data, req.query, range, res);
-					},
-					/* Promise reject callback */
-					function(err) {
-						console.log('spiderTorrent Error:'.red, err.message);
-						handler.emit("noMovie", res);
-						return false;
-					}
-				);
-			} else {
-				/* Data has already been torrented; stream now */
-				spiderStreamer({
-					name: resolution.data.name,
-					length: resolution.data.length,
-					date: movie.released,
-					path: resolution.data.path
-				}, req.query, range, res);
+			var torrent_path = './torrents/'+movie._id+'/'+resolution.resolution;
+			if (resolution.data.path && resolution.data.length) {
+				console.log('spiderTorrent Notice: Movie data found for', movie.title, resolution.resolution);
+				var file_size;
+				try {
+					file_size = fs.statSync(resolution.data.path).size;
+				} catch(exception) {
+					file_size = 0;
+				}
+				if (file_size >= resolution.data.length && (enginePaths[torrent_path] === 1 || resolution.data.downloaded)) {
+					/* Does not work: file always final size; poential fix? */
+					console.log('spiderTorrent Notice: Movie already torrented; streaming:', movie.title, resolution.resolution);
+					spiderStreamer({
+						name: resolution.data.name,
+						length: resolution.data.length,
+						date: movie.released,
+						path: resolution.data.path
+					}, req.query, range, res);
+					return true;
+				}
 			}
+			/* DONE BY TORRET-STREAM: Create folder './torrents/'+movie._id+'/'+resolution.resolution in a way that does not destroy it if it exists */
+			/* Get filestream, filename and file size from torrent-stream, with the file created in folder above */
+			console.log('spiderTorrent Notice: Movie not yet torrented; torrenting:', movie.title, resolution.resolution);
+			getMovieStream(resolution.magnet, torrent_path, movie, resolution).then(
+				/* Promise fulfill callback */
+				function(data) {
+					/* Hand filestream, filename and file size to vid-streamer hack */
+					// console.log('spiderTorrent Notice: Sending data spiderStreamer: { name: "'+data.name+'", size: '+data.length+', date: [Date], stream: [Stream] }');
+					spiderStreamer(data, req.query, range, res);
+				},
+				/* Promise reject callback */
+				function(err) {
+					console.log('spiderTorrent Error:'.red, err.message);
+					handler.emit("noMovie", res);
+					return false;
+				}
+			);
 		});
 	} else {
 		/* If missing (or someone tried to hack resolution) redirect */
