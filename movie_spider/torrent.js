@@ -108,7 +108,7 @@ var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 					});
 					engine.on('idle', function() {
 						console.log('torrentStream Notice: Engine', engine.hashIndex, 'idle');
-						if (engine.selected.length === 0) {//(engine.swarm.downloaded < movie_data.length) {
+						if (engine.selection.length === 0) {//(engine.swarm.downloaded < movie_data.length) {
 							// console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded (', engine.swarm.downloaded, '/', movie_data.length, ')');
 							console.log('torrentStream Notice: Engine', engine.hashIndex, 'no files selected');
 						} else {
