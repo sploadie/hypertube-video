@@ -6,6 +6,7 @@ var events = require('events');
 var colors  = require('colors');
 var settings = require('./config.json');
 var Throttle = require('throttle');
+var ffmpeg = require('fluent-ffmpeg');
 
 var handler = new events.EventEmitter();
 
@@ -87,7 +88,17 @@ var spiderStreamer = function(data, query, range_string, res) {
 					stream = stream.pipe(new Throttle(settings.throttle));
 				}
 				console.log('spiderStreamer Notice: Piping stream');
-				stream.pipe(res);
+				// // stream.pipe(res);
+				try {
+					ffmpeg().input(stream).audioCodec('libmp3lame').videoCodec('libx264').output(res);
+				} catch(exception) {
+					clearInterval(timer_id);
+					console.error('spiderStreamer Error:'.red, 'Could not stream file:', info.path);
+					console.error('Fluent-ffmpeg Error:'.red, exception);
+					// handler.emit("badFile", res);
+					stream.pipe(res);
+					return;
+				}
 				console.log('spiderStreamer Notice: Pipe set');
 			}
 		}
