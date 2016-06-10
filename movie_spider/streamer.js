@@ -23,10 +23,12 @@ var spiderStreamer = function(data, query, range_string, res) {
 	ext = data.name.match(/.*(\..+?)$/);
 
 	if (ext === null || ext.length !== 2 || (info.mime = mimeTypes[ext[1].toLowerCase()]) === undefined) {
-		console.error('spiderStreamer Error:'.red, 'Invalid mime type:', name);
+		console.error('spiderStreamer Error:'.red, 'Invalid mime type:', data.name);
 		handler.emit("badMime", res);
 		return false;
 	}
+
+	console.error('spiderStreamer Notice: Mime type', info.mime, 'found for file:', data.name);
 
 	if (range_string && (range = range_string.match(/bytes=(.+)-(.+)?/)) !== null) {
 		info.start = isNumber(range[1]) && range[1] >= 0 && range[1] < info.end ? range[1] - 0 : info.start;
@@ -80,32 +82,43 @@ var spiderStreamer = function(data, query, range_string, res) {
 				stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
 			} catch(exception) {
 				console.log('spiderStreamer Error:'.red, exception);
-				console.log('spiderStreamer Notice: Retrying in 1 second...');
+				console.log('spiderStreamer Notice: Retrying in 3 seconds...');
 				stream = null
 			}
 			if (stream !== null) {
+				clearInterval(timer_id);
 				if (settings.throttle) {
 					stream = stream.pipe(new Throttle(settings.throttle));
 				}
-				console.log('spiderStreamer Notice: Piping stream');
-				// // stream.pipe(res);
+				console.log('spiderStreamer Notice: Piping converted stream');
 				try {
-					ffmpeg().input(stream).audioCodec('libmp3lame').videoCodec('libx264').output(res);
+					var format = ext[1].slice(1);
+					if (format === 'mkv') format = 'matroska';
+						ffmpeg().input(stream)
+							.on("error", function(err, stdout, stderr) {
+								console.error('spiderStreamer Error:'.red, 'Could not convert file:', info.path);
+								console.log('fluent-ffmpeg Error:'.red, '\nErr:', err, '\nStdOut:', stdout, '\nStdErr:', stderr);
+								/* Handle error */
+								console.log('spiderStreamer Notice: Giving up: Piping raw stream');
+								stream.pipe(res);
+							})
+							.inputFormat(format)
+							.audioCodec('aac')
+							.videoCodec('libx264')
+							.outputFormat('mp4')
+							.outputOptions('-movflags frag_keyframe+empty_moov')
+							.pipe(res);
 				} catch(exception) {
-					clearInterval(timer_id);
-					console.error('spiderStreamer Error:'.red, 'Could not stream file:', info.path);
-					console.error('Fluent-ffmpeg Error:'.red, exception);
-					// handler.emit("badFile", res);
+					console.error('spiderStreamer Error:'.red, 'Could not convert file:', info.path);
+					console.error('fluent-ffmpeg Error:'.red, exception);
+					/* Handle error */
+					console.log('spiderStreamer Notice: Giving up: Piping raw stream');
 					stream.pipe(res);
-					return;
 				}
 				console.log('spiderStreamer Notice: Pipe set');
 			}
 		}
-		if (stream !== null) {
-			clearInterval(timer_id);
-		}
-	}, 1000);
+	}, 2000);
 };
 
 spiderStreamer.settings = function(s) {
@@ -189,6 +202,10 @@ var pack = function(format) {
 var isNumber = function (n) {
 	return !isNaN(parseFloat(n)) && isFinite(n);
 };
+
+// handler.on("error", function(err, stdout, stderr) {
+// 	console.log('FFmpegg fucked up:\nErr:', err, '\nStdOut:', stdout, '\nStdErr:', stderr);
+// });
 
 handler.on("badMime", function(res) {
 	errorHeader(res, 403);
