@@ -3,6 +3,7 @@
 var fs = require('fs');
 var url = require('url');
 var events = require('events');
+var promise = require('promise');
 var colors  = require('colors');
 var settings = require('./config.json');
 var Throttle = require('throttle');
@@ -14,7 +15,7 @@ var mimeTypes = require('./mime_types');
 
 var ffmpegKeyGen = 0;
 var ffmpegHash = {};
-var modifiedHash = {};
+var dataHash = {};
 
 var spiderStreamer = function(data, query, range_string, res) {
 	var stream;
@@ -34,161 +35,206 @@ var spiderStreamer = function(data, query, range_string, res) {
 
 	console.error('spiderStreamer Notice: Mime type', info.mime, 'found for file:', data.name);
 
-	if (range_string && (range = range_string.match(/bytes=(.+)-(.+)?/)) !== null) {
-		info.start = isNumber(range[1]) && range[1] >= 0 && range[1] < info.end ? range[1] - 0 : info.start;
-		info.end = isNumber(range[2]) && range[2] > info.start && range[2] <= info.end ? range[2] - 0 : info.end;
-		info.rangeRequest = true;
-	} else {
-		
-	}
-
 	info.file = data.name;
 	info.path = data.path;
 	info.size = data.length;
 	info.modified = data.date;
 	
-	/* ONLY DO THE FOLLOWING IF NOT MP4, WEBM, OR OGG */
-	if (info.mime !== "video/mp4" && info.mime !== "video/webm" && info.mime !== "video/ogg") {
-		var old_path = info.path;
-		var converted_path = info.path+'.converted.mp4';
-		var converted_file = info.file+'.converted.mp4';
-		var key = ++ffmpegKeyGen;
-		if (ffmpegHash[old_path] === undefined) {
-			console.log('fluent-ffmpeg Notice:', key+':', 'Movie not yet converted, competing for key...');
-			ffmpegHash[old_path] = key;
-		} else {
-			console.log('fluent-ffmpeg Notice:', key+':', 'Movie already converted');
-		}
-		if (ffmpegHash[old_path] === key) {
-			console.log('fluent-ffmpeg Notice:', key+':', 'Chosen for conversion');
-			console.log('spiderStreamer Notice: Converting to video/mp4');
-			var ffmpeg_call = function() {
-				try {
-					// var format = ext[1].slice(1);
-					// if (format === 'mkv') format = 'matroska';
-					// ffmpeg().input(stream)
-					ffmpeg().input(old_path)
-						.on("error", function(err, stdout, stderr) {
+	new Promise(function(fulfill, reject) {
+		/* ONLY DO THE FOLLOWING IF NOT MP4, WEBM, OR OGG */
+		if (info.mime !== "video/mp4" && info.mime !== "video/webm" && info.mime !== "video/ogg") {
+			var old_path = info.path;
+			var converted_path = info.path+'.converted.mp4';
+			var converted_file = info.file+'.converted.mp4';
+			var key = ++ffmpegKeyGen;
+			if (ffmpegHash[old_path] === undefined) {
+				console.log('fluent-ffmpeg Notice:', key+':', 'Movie not yet converted, competing for key...');
+				ffmpegHash[old_path] = key;
+			}
+			if (ffmpegHash[old_path] === key) {
+				console.log('fluent-ffmpeg Notice:', key+':', 'Chosen for conversion');
+				console.log('spiderStreamer Notice: Converting to video/mp4');
+				var fails = 0;
+				var busy = false;
+				var interval_id = setInterval(function() {
+					if (!busy) {
+						busy = true;
+						try {
+							// var format = ext[1].slice(1);
+							// if (format === 'mkv') format = 'matroska';
+							// ffmpeg().input(stream)
+							ffmpeg().input(old_path)
+								.on("error", function(err, stdout, stderr) {
+									console.error('spiderStreamer Error:'.red, 'Could not convert file:', old_path);
+									console.log('fluent-ffmpeg Error:'.red, '\nErr:', err, '\nStdOut:', stdout, '\nStdErr:', stderr);
+									/* Handle error */
+									++fails;
+									busy = false;
+									// console.log('spiderStreamer Notice: Giving up: Piping raw stream');
+									// stream.pipe(res);
+								})
+								.on('start', function(cmd) {
+									console.log('fluent-ffmpeg Notice: Started:', cmd);
+								})
+								.on('codecData', function(data) {
+									console.log('fluent-ffmpeg Notice: CodecData:', data);
+									clearInterval(interval_id);
+									fulfill(data);
+									dataHash[old_path] = data;
+								})
+								// .on('progress', function(progress) {
+								// 	console.log('fluent-ffmpeg Notice: Progress:', progress.timemark, 'converted');
+								// })
+								// .inputFormat(format)
+								.audioCodec('aac')
+								.videoCodec('libx264')
+								.output(converted_path)
+								.outputFormat('mp4')
+								.outputOptions('-movflags frag_keyframe+empty_moov')
+								.run();
+								// .pipe(res);
+
+						} catch(exception) {
 							console.error('spiderStreamer Error:'.red, 'Could not convert file:', old_path);
-							console.log('fluent-ffmpeg Error:'.red, '\nErr:', err, '\nStdOut:', stdout, '\nStdErr:', stderr);
+							console.error('fluent-ffmpeg Error:'.red, exception);
 							/* Handle error */
-							if (++i < 10) {
-								ffmpeg_call();
-							} else {
-								console.log('spiderStreamer Notice: Giving up: Not piping anything');
-							}
+							++fails;
+							busy = false;
 							// console.log('spiderStreamer Notice: Giving up: Piping raw stream');
 							// stream.pipe(res);
-						})
-						.on('start', function(cmd) {
-							console.log('fluent-ffmpeg Notice: Started:', cmd);
-						})
-						.on('codecData', function(data) {
-							console.log('fluent-ffmpeg Notice: CodecData:', data);
-						})
-						// .on('progress', function(progress) {
-						// 	console.log('fluent-ffmpeg Notice: Progress:', progress.timemark, 'converted');
-						// })
-						// .inputFormat(format)
-						.audioCodec('aac')
-						.videoCodec('libx264')
-						.output(converted_path)
-						.outputFormat('mp4')
-						.outputOptions('-movflags frag_keyframe+empty_moov')
-						.run();
-						// .pipe(res);
-
-				} catch(exception) {
-					console.error('spiderStreamer Error:'.red, 'Could not convert file:', old_path);
-					console.error('fluent-ffmpeg Error:'.red, exception);
-					/* Handle error */
-					if (++i < 10) {
-						ffmpeg_call();
+						}
 					} else {
-						console.log('spiderStreamer Notice: Giving up: Not piping anything');
+						console.log('fluent-ffmpeg is busy');
 					}
-					// console.log('spiderStreamer Notice: Giving up: Piping raw stream');
-					// stream.pipe(res);
-				}
-			}
-			i = 0;
-			ffmpeg_call()
-		}
-
-		info.file = converted_file;
-		info.path = converted_path;
-		info.mime = 'video/mp4';
-		// info.modified = modifiedHash[old_path] ? modifiedHash[old_path] : new Date;
-		info.modified = new Date;
-		try {
-			info.size = fs.statSync(info.path).size;
-		} catch(exception) {
-			console.log('spiderStreamer Error:'.red, 'Converted movie size not found');
-			info.size = 0;
-		}
-	} else {
-		console.log('spiderStreamer Notice: No conversion needed:', info.mime);
-	}
-	/* ONLY DO THE ABOVE IF NOT MP4, WEBM, OR OGG */
-
-	info.rangeRequest = false;
-	info.start = 0;
-	info.end = info.size - 1;
-	if (range_string && (range = range_string.match(/bytes=(.+)-(.+)?/)) !== null) {
-		info.start = isNumber(range[1]) && range[1] >= 0 && range[1] < info.end ? range[1] - 0 : info.start;
-		info.end = isNumber(range[2]) && range[2] > info.start && range[2] <= info.end ? range[2] - 0 : info.end;
-		info.rangeRequest = true;
-	} else if (query.start || query.end) {
-		// This is a range request, but doesn't get range headers. So there.
-		info.start = isNumber(query.start) && query.start >= 0 && query.start < info.end ? query.start - 0 : info.start;
-		info.end = isNumber(query.end) && query.end > info.start && query.end <= info.end ? query.end - 0 : info.end;
-	}
-
-	info.length = info.end - info.start + 1;
-
-	console.log('spiderStreamer Notice: Header Info:', info);
-
-	console.log('spiderStreamer Notice: Sending header');
-	downloadHeader(res, info);
-
-	// // Flash vids seem to need this on the front, even if they start part way through. (JW Player does anyway.)
-	// if (info.start > 0 && info.mime === "video/x-flv") {
-	// 	res.write("FLV" + pack("CCNN", 1, 5, 9, 9));
-	// }
-
-	stream = null;
-	i = 0;
-	timer_id = setInterval(function() {
-		++i;
-		if (stream === null) {
-			if (i === 5) {
-				clearInterval(timer_id);
-				console.error('spiderStreamer Error:'.red, 'Could not stream file:', info.path);
-				/* Can't set headers after they are sent. */
-				// handler.emit("badFile", res);
-				return;
+					if (fails > 30 && busy === false) {
+						clearInterval(interval_id);
+						reject('fluent-ffmpeg never launched without error');
+					}
+				}, 3000);
+			} else {
+				console.log('fluent-ffmpeg Notice:', key+':', 'Movie already converted');
+				fulfill(dataHash[old_path]);
 			}
 
+			info.file = converted_file;
+			info.path = converted_path;
+			info.mime = 'video/mp4';
+			info.modified = new Date;
 			try {
-				stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
+				info.size = fs.statSync(info.path).size;
 			} catch(exception) {
-				console.log('spiderStreamer Error:'.red, exception);
-				console.log('spiderStreamer Notice: Retrying in 3 seconds...');
-				stream = null
+				console.log('spiderStreamer Error:'.red, 'Converted movie size not found');
+				info.size = 0;
 			}
-			if (stream !== null) {
-				clearInterval(timer_id);
-				if (settings.throttle) {
-					stream = stream.pipe(new Throttle(settings.throttle));
-				}
-				console.log('spiderStreamer Notice: Piping stream...');
-				stream.pipe(res);
-				console.log('spiderStreamer Notice: Pipe set');
-			}
-		} else if (stream !== null) {
-			clearInterval(timer_id);
+		} else {
+			console.log('spiderStreamer Notice: No conversion needed:', info.mime);
+			fulfill(false);
 		}
-	}, 3000);
+		/* ONLY DO THE ABOVE IF NOT MP4, WEBM, OR OGG */
+	}).then(
+		function(success) {
+			new Promise(function(fulfill, reject) {
+				var fails = 0;
+				var interval_id = setInterval(function() {
+					try {
+						info.size = fs.statSync(info.path).size;
+						console.log('spiderStreamer Notice: Movie file size:', info.size);
+						if (info.size > 5000000) {
+							clearInterval(interval_id);
+							fulfill(info.size);
+							return;
+						}
+						console.log('spiderStreamer Notice: Movie file not yet big enough; fails:', fails);
+					} catch(exception) {
+						console.error('spiderStreamer Error:'.red, exception);
+					}
+					++fails;
+					if (fails > 30) {
+						clearInterval(interval_id);
+						reject('Movie file never grew to at least 5mb');
+					}
+				}, 2000);
+			}).then(
+				function(success) {
+					info.rangeRequest = false;
+					info.start = 0;
+					info.end = info.size - 1;
+					if (range_string && (range = range_string.match(/bytes=(.+)-(.+)?/)) !== null) {
+						info.start = isNumber(range[1]) && range[1] >= 0 && range[1] < info.end ? range[1] - 0 : info.start;
+						info.end = isNumber(range[2]) && range[2] > info.start && range[2] <= info.end ? range[2] - 0 : info.end;
+						info.rangeRequest = true;
+					} else if (query.start || query.end) {
+						// This is a range request, but doesn't get range headers. So there.
+						info.start = isNumber(query.start) && query.start >= 0 && query.start < info.end ? query.start - 0 : info.start;
+						info.end = isNumber(query.end) && query.end > info.start && query.end <= info.end ? query.end - 0 : info.end;
+					}
+
+					info.length = info.end - info.start + 1;
+
+					console.log('spiderStreamer Notice: Header Info:', info);
+
+					console.log('spiderStreamer Notice: Sending header');
+					downloadHeader(res, info);
+
+					// // Flash vids seem to need this on the front, even if they start part way through. (JW Player does anyway.)
+					// if (info.start > 0 && info.mime === "video/x-flv") {
+					// 	res.write("FLV" + pack("CCNN", 1, 5, 9, 9));
+					// }
+					try {
+						stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
+						if (settings.throttle) {
+							stream = stream.pipe(new Throttle(settings.throttle));
+						}
+						console.log('spiderStreamer Notice: Piping stream...');
+						stream.pipe(res);
+						console.log('spiderStreamer Notice: Pipe set');
+					} catch(exception) {
+						stream = null;
+						i = 0;
+						console.log('spiderStreamer Error:'.red, exception);
+						console.log('spiderStreamer Notice: Retrying... i:', i);
+						timer_id = setInterval(function() {
+							++i;
+							if (stream === null) {
+								if (i === 5) {
+									clearInterval(timer_id);
+									console.error('spiderStreamer Error:'.red, 'Could not stream file:', info.path);
+									/* Can't set headers after they are sent. */
+									// handler.emit("badFile", res);
+									return;
+								}
+
+								try {
+									stream = fs.createReadStream(info.path, { flags: "r", start: info.start, end: info.end });
+								} catch(exception) {
+									console.log('spiderStreamer Error:'.red, exception);
+									console.log('spiderStreamer Notice: Retrying in 3 seconds... i:', i);
+									stream = null
+								}
+								if (stream !== null) {
+									clearInterval(timer_id);
+									if (settings.throttle) {
+										stream = stream.pipe(new Throttle(settings.throttle));
+									}
+									console.log('spiderStreamer Notice: Piping stream...');
+									stream.pipe(res);
+									console.log('spiderStreamer Notice: Pipe set');
+								}
+							} else if (stream !== null) {
+								clearInterval(timer_id);
+							}
+						}, 3000);
+					}
+				},
+				function(failure) {
+					console.log('spiderStreamer Error:'.red, failure);
+				}
+			);
+		},
+		function(failure) {
+			console.log('spiderStreamer Error:'.red, failure);
+		}
+	);
 };
 
 spiderStreamer.settings = function(s) {

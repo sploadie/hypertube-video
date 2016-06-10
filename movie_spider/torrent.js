@@ -111,7 +111,7 @@ var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 						if (engine.selection.length === 0) {//(engine.swarm.downloaded < movie_data.length) {
 							// console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded (', engine.swarm.downloaded, '/', movie_data.length, ')');
 							console.log('torrentStream Notice: Engine', engine.hashIndex, 'no files selected');
-						} else {
+						} // else {
 							console.log('torrentStream Notice: Engine', engine.hashIndex, 'downloaded (', engine.swarm.downloaded, '/', movie_data.length, '); destroying');
 							/* FIXME: If fds are still open, maybe turn this back on */
 							engine.removeAllListeners();
@@ -130,7 +130,7 @@ var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 									return fulfill(false);
 								}
 							);
-						}
+						// }
 					});
 				}
 			} else {

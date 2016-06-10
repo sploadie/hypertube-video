@@ -6,7 +6,7 @@ var mimeTypes = {
 	".f4v":		"video/mp4",
 	".f4p":		"video/mp4",
 	".mp4":		"video/mp4",
-	".mkv":		"video/mp4", /* FAST PATCH (POSSIBLY MUST FIX LATER) (SHOULD ACTUALLY BE CONVERTED FROM video/mkv TO WHATEVER) */
+	".mkv":		"video/matroska", /* FAST PATCH (POSSIBLY MUST FIX LATER) (SHOULD ACTUALLY BE CONVERTED FROM video/mkv TO WHATEVER) */
 	".asf":		"video/x-ms-asf",
 	".asr":		"video/x-ms-asf",
 	".asx":		"video/x-ms-asf",
