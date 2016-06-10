@@ -224,8 +224,10 @@ var spiderTorrent = function(req, res) {
 				try {
 					file_size = fs.statSync(resolution.data.path).size;
 				} catch(exception) {
+					console.log('spiderTorrent Error:'.red, 'Movie size not found');
 					file_size = 0;
 				}
+				// console.log('spiderTorrent Notice: Movie size comparison:', file_size, resolution.data.length);
 				if (file_size >= resolution.data.length && (enginePaths[torrent_path] === 1 || resolution.data.downloaded)) {
 					/* Does not work: file always final size; poential fix? */
 					console.log('spiderTorrent Notice: Movie already torrented; streaming:', movie.title, resolution.resolution);
