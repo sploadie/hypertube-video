@@ -48,7 +48,7 @@ var spiderStreamer = function(data, query, range_string, res) {
 	info.modified = data.date;
 	
 	/* ONLY DO THE FOLLOWING IF NOT MP4, WEBM, OR OGG */
-	if (ext !== ".mp4" && ext !== ".webm" && ext !== ".ogg") {
+	if (info.mime !== "video/mp4" && info.mime !== "video/webm" && info.mime !== "video/ogg") {
 		var old_path = info.path;
 		var converted_path = info.path+'.converted.mp4';
 		var converted_file = info.file+'.converted.mp4';
@@ -126,8 +126,9 @@ var spiderStreamer = function(data, query, range_string, res) {
 			console.log('spiderStreamer Error:'.red, 'Converted movie size not found');
 			info.size = 0;
 		}
+	} else {
+		console.log('spiderStreamer Notice: No conversion needed:', info.mime);
 	}
-
 	/* ONLY DO THE ABOVE IF NOT MP4, WEBM, OR OGG */
 
 	info.rangeRequest = false;
@@ -180,7 +181,7 @@ var spiderStreamer = function(data, query, range_string, res) {
 				if (settings.throttle) {
 					stream = stream.pipe(new Throttle(settings.throttle));
 				}
-				console.log('spiderStreamer Notice: Piping converted stream');
+				console.log('spiderStreamer Notice: Piping stream...');
 				stream.pipe(res);
 				console.log('spiderStreamer Notice: Pipe set');
 			}
@@ -188,7 +189,6 @@ var spiderStreamer = function(data, query, range_string, res) {
 			clearInterval(timer_id);
 		}
 	}, 3000);
-	console.log('spiderStreamer Notice: End of function');
 };
 
 spiderStreamer.settings = function(s) {
