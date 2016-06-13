@@ -116,7 +116,7 @@ var getMovieStream = function(magnet, torrent_path, movie, resolution) {
 							/* FIXME: If fds are still open, maybe turn this back on */
 							engine.removeAllListeners();
 							engine.destroy();
-							console.log('torrentStream Notice: Movie set as downloaded:', movie_data.title, resolution.resolution);
+							console.log('torrentStream Notice: Movie set as downloaded:', movie.title, resolution.resolution);
 							resolution.data.downloaded = true;
 							movie.save().then(
 								/* Promise fulfill callback */
