@@ -16,6 +16,7 @@ var mimeTypes = require('./mime_types');
 var ffmpegKeyGen = 0;
 var ffmpegHash = {};
 var dataHash = {};
+var startup_date = new Date;
 
 var spiderStreamer = function(data, query, range_string, res) {
 	var stream;
@@ -43,6 +44,7 @@ var spiderStreamer = function(data, query, range_string, res) {
 	new Promise(function(fulfill, reject) {
 		/* ONLY DO THE FOLLOWING IF NOT MP4, WEBM, OR OGG */
 		if (info.mime !== "video/mp4" && info.mime !== "video/webm" && info.mime !== "video/ogg") {
+			console.log('spiderStreamer Notice: Needs to be converted to video/mp4:', info.path);
 			var old_path = info.path;
 			var converted_path = info.path+'.converted.mp4';
 			var converted_file = info.file+'.converted.mp4';
@@ -119,6 +121,7 @@ var spiderStreamer = function(data, query, range_string, res) {
 			info.file = converted_file;
 			info.path = converted_path;
 			info.mime = 'video/mp4';
+			// info.modified = startup_date;
 			info.modified = new Date;
 			try {
 				info.size = fs.statSync(info.path).size;
@@ -138,7 +141,7 @@ var spiderStreamer = function(data, query, range_string, res) {
 				var interval_id = setInterval(function() {
 					try {
 						info.size = fs.statSync(info.path).size;
-						console.log('spiderStreamer Notice: Movie file size:', info.size);
+						console.log('spiderStreamer Notice:', info.path, ' size:', info.size);
 						if (info.size > 5000000) {
 							clearInterval(interval_id);
 							fulfill(info.size);
